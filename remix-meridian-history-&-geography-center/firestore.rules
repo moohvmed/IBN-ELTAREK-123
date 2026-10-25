@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Security Primitives
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isTutor() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/tutors/$(request.auth.uid)) ||
+        request.auth.token.email in ['tarek.eltarek.history@gmail.com', 'wastedstar16@gmail.com']
+      );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'role']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 120 &&
+             data.role in ['student', 'parent', 'tutor'] &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() <= 30)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 120)) &&
+             (!('specializationOrGrade' in data) || (data.specializationOrGrade is string && data.specializationOrGrade.size() <= 200)) &&
+             (!('linkedParentPhone' in data) || (data.linkedParentPhone is string && data.linkedParentPhone.size() <= 30)) &&
+             (!('linkedStudentPhone' in data) || (data.linkedStudentPhone is string && data.linkedStudentPhone.size() <= 30));
+    }
+
+    function isValidGrade(data) {
+      return data.keys().hasAll(['id', 'studentId', 'examTitle', 'score', 'totalScore']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.studentId is string && data.studentId.size() <= 128 &&
+             data.examTitle is string && data.examTitle.size() <= 200 &&
+             data.score is number && data.totalScore is number;
+    }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll(['id', 'studentId', 'lectureNumber', 'date', 'status']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.studentId is string && data.studentId.size() <= 128 &&
+             data.lectureNumber is number &&
+             data.date is string && data.date.size() <= 50 &&
+             data.status in ['present', 'late', 'excused'];
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isTutor());
+      allow list: if isTutor();
+      allow create: if isSignedIn() && isOwner(userId) && isValidId(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && (isOwner(userId) || isTutor()) && isValidId(userId) && isValidUser(incoming());
+      allow delete: if isTutor();
+    }
+
+    // Grades Collection
+    match /grades/{gradeId} {
+      allow get: if isSignedIn() && (existing().studentId == request.auth.uid || isTutor());
+      allow list: if isSignedIn();
+      allow create: if isTutor() && isValidId(gradeId) && isValidGrade(incoming());
+      allow update: if isTutor() && isValidId(gradeId) && isValidGrade(incoming());
+      allow delete: if isTutor();
+    }
+
+    // Attendance Collection
+    match /attendance/{attendanceId} {
+      allow get: if isSignedIn() && (existing().studentId == request.auth.uid || isTutor());
+      allow list: if isSignedIn();
+      allow create: if isTutor() && isValidId(attendanceId) && isValidAttendance(incoming());
+      allow update: if isTutor() && isValidId(attendanceId) && isValidAttendance(incoming());
+      allow delete: if isTutor();
+    }
+  }
+}

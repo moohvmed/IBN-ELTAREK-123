@@ -1,0 +1,8 @@
+{
+  "name": "Remix Meridian History \u0026 Geography Center",
+  "description": "Modern and professional login screen and student/tutor portal for a geography and history tutoring center with deep blue and forest green aesthetic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
